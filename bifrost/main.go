@@ -10,7 +10,6 @@ import (
 
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost"
-	"github.com/maximhq/bifrost-gateway/lib"
 	"github.com/maximhq/bifrost/interfaces"
 	"github.com/valyala/fasthttp"
 )
@@ -18,11 +17,13 @@ import (
 var (
 	openaiKey string
 	port      string
+	proxyURL  string
 )
 
 func init() {
 	flag.StringVar(&openaiKey, "openai-key", "", "OpenAI API key")
 	flag.StringVar(&port, "port", "3001", "Port to run the server on")
+	flag.StringVar(&proxyURL, "proxy", "", "Proxy URL (e.g., http://localhost:8080)")
 	flag.Parse()
 
 	if openaiKey == "" {
@@ -36,12 +37,11 @@ type ChatRequest struct {
 }
 
 // CustomAccount implements the Account interface
-type CustomAccount struct {
-	lib.BaseAccount
+type BaseAccount struct {
 	apiKey string
 }
 
-func (a *CustomAccount) GetKeysForProvider(providerKey interfaces.SupportedModelProvider) ([]interfaces.Key, error) {
+func (a *BaseAccount) GetKeysForProvider(providerKey interfaces.SupportedModelProvider) ([]interfaces.Key, error) {
 	if providerKey == interfaces.OpenAI {
 		return []interfaces.Key{
 			{
@@ -55,12 +55,44 @@ func (a *CustomAccount) GetKeysForProvider(providerKey interfaces.SupportedModel
 	return nil, fmt.Errorf("unsupported provider: %s", providerKey)
 }
 
+func (baseAccount *BaseAccount) GetInitiallyConfiguredProviders() ([]interfaces.SupportedModelProvider, error) {
+	return []interfaces.SupportedModelProvider{interfaces.OpenAI}, nil
+}
+
+// GetConcurrencyAndBufferSizeForProvider returns the concurrency and buffer size settings for a provider
+func (baseAccount *BaseAccount) GetConfigForProvider(providerKey interfaces.SupportedModelProvider) (*interfaces.ProviderConfig, error) {
+	switch providerKey {
+	case interfaces.OpenAI:
+		config := &interfaces.ProviderConfig{
+			NetworkConfig: interfaces.NetworkConfig{
+				DefaultRequestTimeoutInSeconds: 30,
+			},
+			ConcurrencyAndBufferSize: interfaces.ConcurrencyAndBufferSize{
+				Concurrency: 5000,
+				BufferSize:  7500,
+			},
+		}
+
+		// Only set proxy configuration if proxy flag is provided
+		if proxyURL != "" {
+			config.ProxyConfig = &interfaces.ProxyConfig{
+				Type: interfaces.HttpProxy,
+				URL:  proxyURL,
+			}
+		}
+
+		return config, nil
+	default:
+		return nil, fmt.Errorf("unsupported provider: %s", providerKey)
+	}
+}
+
 func main() {
 	// Set GOMAXPROCS to utilize all available CPU cores
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	// Initialize the Bifrost client with connection pooling
-	account := &CustomAccount{
+	account := &BaseAccount{
 		apiKey: openaiKey,
 	}
 	client, err := bifrost.Init(account, nil, nil)

@@ -111,7 +111,7 @@ esac
 # Start servers based on selection
 if [ "$SERVER" = "all" ] || [ "$SERVER" = "bifrost" ]; then
     cd bifrost
-    echo "Starting Bifrost API Wrapper on port $BIFROST_PORT..."
+    echo "Starting Bifrost FastAPI Wrapper on port $BIFROST_PORT..."
     python api.py --openai-key $OPENAI_API_KEY --port $BIFROST_PORT &
     BIFROST_PID=$!
 fi

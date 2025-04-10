@@ -31,7 +31,8 @@ type BenchmarkResult struct {
 	ProviderName      string
 	Metrics           *vegeta.Metrics
 	CPUUsage          float64
-	ServerMemoryStats []ServerMemStat // Added server memory monitoring
+	ServerMemoryStats []ServerMemStat
+	DropReasons       map[string]int // Track reasons for dropped requests
 }
 
 // MemStat captures memory statistics
@@ -52,10 +53,10 @@ type ServerMemStat struct {
 
 func main() {
 	// Define command line flags
-	rate := flag.Int("rate", 500, "Requests per second")
-	duration := flag.Int("duration", 5, "Duration of test in seconds")
+	rate := flag.Int("rate", 750, "Requests per second")
+	duration := flag.Int("duration", 10, "Duration of test in seconds")
 	outputFile := flag.String("output", "results.json", "Output file for results")
-	cooldown := flag.Int("cooldown", 5, "Cooldown period between tests in seconds")
+	cooldown := flag.Int("cooldown", 10, "Cooldown period between tests in seconds")
 	provider := flag.String("provider", "", "Specific provider to benchmark (bifrost, portkey, braintrust, llmlite, openrouter)")
 	flag.Parse()
 
@@ -130,24 +131,24 @@ func initializeProviders() []Provider {
 			Port:     os.Getenv("PORTKEY_PORT"),
 			Payload:  payload,
 		},
-		// {
-		// 	Name:     "Braintrust",
-		// 	Endpoint: fmt.Sprintf(baseUrl, os.Getenv("BRAINTRUST_PORT")),
-		// 	Port:     os.Getenv("BRAINTRUST_PORT"),
-		// 	Payload:  payload,
-		// },
-		// {
-		// 	Name:     "LLMLite",
-		// 	Endpoint: fmt.Sprintf(baseUrl, os.Getenv("LLMLITE_PORT")),
-		// 	Port:     os.Getenv("LLMLITE_PORT"),
-		// 	Payload:  payload,
-		// },
-		// {
-		// 	Name:     "OpenRouter",
-		// 	Endpoint: fmt.Sprintf(baseUrl, os.Getenv("OPENROUTER_PORT")),
-		// 	Port:     os.Getenv("OPENROUTER_PORT"),
-		// 	Payload:  payload,
-		// },
+		{
+			Name:     "Braintrust",
+			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("BRAINTRUST_PORT")),
+			Port:     os.Getenv("BRAINTRUST_PORT"),
+			Payload:  payload,
+		},
+		{
+			Name:     "LLMLite",
+			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("LLMLITE_PORT")),
+			Port:     os.Getenv("LLMLITE_PORT"),
+			Payload:  payload,
+		},
+		{
+			Name:     "OpenRouter",
+			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("OPENROUTER_PORT")),
+			Port:     os.Getenv("OPENROUTER_PORT"),
+			Payload:  payload,
+		},
 	}
 
 	return providers
@@ -159,15 +160,31 @@ func runBenchmarks(providers []Provider, rate int, duration int, cooldown int) [
 	for i, provider := range providers {
 		fmt.Printf("Benchmarking %s...\n", provider.Name)
 
+		httpTransport := &http.Transport{
+			Proxy:               http.ProxyFromEnvironment,
+			MaxIdleConnsPerHost: 100000,
+			MaxConnsPerHost:     0,
+			IdleConnTimeout:     10 * time.Second,
+			// Optionally tune TLS and other settings if needed
+		}
+
+		httpClient := &http.Client{
+			Transport: httpTransport,
+			Timeout:   30 * time.Second, // adjust as necessary
+		}
+
 		// Define the attack
 		targeter := createTargeter(provider)
-		attacker := vegeta.NewAttacker()
+		attacker := vegeta.NewAttacker(vegeta.Client(httpClient))
 
 		// Setup memory monitoring for the server
 		var serverMemStats []ServerMemStat
 		var memMutex sync.Mutex
 		stopMonitoring := make(chan struct{})
 		var wg sync.WaitGroup
+
+		// Initialize drop reasons tracking
+		dropReasons := make(map[string]int)
 
 		// Start server memory monitoring
 		wg.Add(1)
@@ -176,7 +193,7 @@ func runBenchmarks(providers []Provider, rate int, duration int, cooldown int) [
 			p, err := getProcessByPort(provider.Port)
 			if err != nil {
 				log.Printf("Warning: Could not find process on port %s: %v", provider.Port, err)
-				return // Exit goroutine but allow benchmark to continue
+				return
 			}
 
 			monitorServerMemory(p, stopMonitoring, &serverMemStats, &memMutex)
@@ -193,10 +210,18 @@ func runBenchmarks(providers []Provider, rate int, duration int, cooldown int) [
 		for res := range attacker.Attack(targeter, attackRate, time.Duration(duration)*time.Second, provider.Name) {
 			metrics.Add(res)
 
+			// Track drop reasons
+			if res.Error != "" {
+				dropReasons[res.Error]++
+			} else if res.Code != 200 {
+				dropReasons[fmt.Sprintf("HTTP %d", res.Code)]++
+			}
+
 			// Check if context is done
 			select {
 			case <-ctx.Done():
 				log.Printf("Attack for %s timed out", provider.Name)
+				dropReasons["context_timeout"]++
 				goto EndAttack
 			default:
 				// Continue with the attack
@@ -208,7 +233,7 @@ func runBenchmarks(providers []Provider, rate int, duration int, cooldown int) [
 
 		// Stop memory monitoring
 		close(stopMonitoring)
-		wg.Wait() // Wait for monitoring goroutine to finish
+		wg.Wait()
 
 		// Lock while copying memory stats to ensure thread safety
 		memMutex.Lock()
@@ -221,6 +246,7 @@ func runBenchmarks(providers []Provider, rate int, duration int, cooldown int) [
 			ProviderName:      provider.Name,
 			Metrics:           &metrics,
 			ServerMemoryStats: serverMemStatsCopy,
+			DropReasons:       dropReasons,
 		})
 
 		fmt.Println(metrics.StatusCodes)
@@ -374,18 +400,9 @@ func createTargeter(provider Provider) vegeta.Targeter {
 }
 
 func saveResults(results []BenchmarkResult, outputFile string) {
-	// Convert results to a format suitable for JSON serialization
-	// type SerializableMemStat struct {
-	// 	Timestamp    string  `json:"timestamp"`
-	// 	RSSBytes     uint64  `json:"rss_bytes"`
-	// 	VMSBytes     uint64  `json:"vms_bytes"`
-	// 	MemPercent   float64 `json:"mem_percent"`
-	// 	RSSMegabytes float64 `json:"rss_mb"`
-	// }
-
 	type SerializableResult struct {
 		Requests           uint64         `json:"requests"`
-		Rate               float64        `json:"rate"` // Requests per second
+		Rate               float64        `json:"rate"`
 		SuccessRate        float64        `json:"success_rate"`
 		MeanLatencyMs      float64        `json:"mean_latency_ms"`
 		P50LatencyMs       float64        `json:"p50_latency_ms"`
@@ -393,12 +410,10 @@ func saveResults(results []BenchmarkResult, outputFile string) {
 		MaxLatencyMs       float64        `json:"max_latency_ms"`
 		ThroughputRPS      float64        `json:"throughput_rps"`
 		Timestamp          string         `json:"timestamp"`
-		ErrorRate          float64        `json:"error_rate"`
 		StatusCodeCounts   map[string]int `json:"status_code_counts"`
 		ServerPeakMemoryMB float64        `json:"server_peak_memory_mb"`
 		ServerAvgMemoryMB  float64        `json:"server_avg_memory_mb"`
-		// Include detailed memory stats
-		// DetailedMemoryStats []SerializableMemStat `json:"detailed_memory_stats"`
+		DropReasons        map[string]int `json:"drop_reasons"` // Add drop reasons to serialized output
 	}
 
 	// Create a map with provider names as keys
@@ -406,12 +421,10 @@ func saveResults(results []BenchmarkResult, outputFile string) {
 
 	// Try to read existing results file
 	if _, err := os.Stat(outputFile); err == nil {
-		// File exists, read it
 		fileData, err := os.ReadFile(outputFile)
 		if err != nil {
 			log.Printf("Warning: Could not read existing results file: %v", err)
 		} else {
-			// Parse existing results
 			if err := json.Unmarshal(fileData, &resultsMap); err != nil {
 				log.Printf("Warning: Could not parse existing results file: %v", err)
 				resultsMap = make(map[string]SerializableResult)
@@ -442,38 +455,20 @@ func saveResults(results []BenchmarkResult, outputFile string) {
 			avgMem = float64(totalMem) / float64(len(res.ServerMemoryStats)) / (1024 * 1024)
 		}
 
-		// Convert detailed memory stats
-		// detailedStats := make([]SerializableMemStat, 0, len(res.ServerMemoryStats))
-		// for _, stat := range res.ServerMemoryStats {
-		// 	detailedStats = append(detailedStats, SerializableMemStat{
-		// 		Timestamp:    stat.Timestamp.Format(time.RFC3339Nano),
-		// 		RSSBytes:     stat.RSS,
-		// 		VMSBytes:     stat.VMS,
-		// 		MemPercent:   stat.MemPercent,
-		// 		RSSMegabytes: float64(stat.RSS) / (1024 * 1024),
-		// 	})
-		// }
-
 		resultsMap[strings.ToLower(res.ProviderName)] = SerializableResult{
-			Requests:      res.Metrics.Requests,
-			Rate:          res.Metrics.Rate,
-			SuccessRate:   100.0 * res.Metrics.Success,
-			MeanLatencyMs: float64(res.Metrics.Latencies.Mean) / float64(time.Millisecond),
-			P50LatencyMs:  float64(res.Metrics.Latencies.P50) / float64(time.Millisecond),
-			P99LatencyMs:  float64(res.Metrics.Latencies.P99) / float64(time.Millisecond),
-			MaxLatencyMs:  float64(res.Metrics.Latencies.Max) / float64(time.Millisecond),
-			ThroughputRPS: res.Metrics.Throughput,
-			Timestamp:     time.Now().Format(time.RFC3339),
-			ErrorRate: func() float64 {
-				if res.Metrics.Requests > 0 {
-					return 100.0 * float64(uint64(len(res.Metrics.StatusCodes)-1)) / float64(res.Metrics.Requests)
-				}
-				return 0.0
-			}(),
+			Requests:           res.Metrics.Requests,
+			Rate:               res.Metrics.Rate,
+			SuccessRate:        100.0 * res.Metrics.Success,
+			MeanLatencyMs:      float64(res.Metrics.Latencies.Mean) / float64(time.Millisecond),
+			P50LatencyMs:       float64(res.Metrics.Latencies.P50) / float64(time.Millisecond),
+			P99LatencyMs:       float64(res.Metrics.Latencies.P99) / float64(time.Millisecond),
+			MaxLatencyMs:       float64(res.Metrics.Latencies.Max) / float64(time.Millisecond),
+			ThroughputRPS:      res.Metrics.Throughput,
+			Timestamp:          time.Now().Format(time.RFC3339),
 			StatusCodeCounts:   statusCodes,
 			ServerPeakMemoryMB: float64(peakMem) / (1024 * 1024),
 			ServerAvgMemoryMB:  avgMem,
-			// DetailedMemoryStats: detailedStats,
+			DropReasons:        res.DropReasons, // Include drop reasons in output
 		}
 	}
 

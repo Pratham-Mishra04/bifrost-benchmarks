@@ -8,19 +8,18 @@ import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-
-app = FastAPI()
+from contextlib import asynccontextmanager
 
 # Global variables
 bifrost_process = None
 openai_api_key = None
 bifrost_port = 3039  # Static port for Bifrost Go server
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global bifrost_process, openai_api_key
     
-    # Start Bifrost Go server
+    # Startup
     try:
         bifrost_process = subprocess.Popen(
             [
@@ -49,9 +48,9 @@ async def startup_event():
         print(f"Failed to start Bifrost server: {e}")
         sys.exit(1)
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    global bifrost_process
+    yield
+
+    # Shutdown
     if bifrost_process:
         print("Shutting down Bifrost server...")
         bifrost_process.terminate()
@@ -60,6 +59,8 @@ async def shutdown_event():
         except subprocess.TimeoutExpired:
             bifrost_process.kill()
         print("Bifrost server shut down")
+
+app = FastAPI(lifespan=lifespan)
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):

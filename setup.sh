@@ -48,6 +48,10 @@ install_go_deps() {
 install_python_deps() {
     local dir=$1
     echo "Installing Python dependencies in $dir..."
+
+    if [ "$dir" == "llmlite" ]; then
+        python3 -m pip install 'litellm[proxy]'
+    fi
     
     if [ -f "$dir/requirements.txt" ]; then
         cd "$dir"

@@ -124,6 +124,10 @@ if [ "$SERVER" = "all" ] || [ "$SERVER" = "openrouter" ]; then
 fi
 
 if [ "$SERVER" = "all" ] || [ "$SERVER" = "llmlite" ]; then
+    export OPENAI_API_KEY=$OPENAI_API_KEY
+    litellm --model gpt-4o-mini --port $LLMLITE_PORT &
+    LLMLITE_GATEWAY_PID=$!
+
     cd llmlite
     python api.py --openai-key $OPENAI_API_KEY --port $LLMLITE_PORT &
     LLMLITE_PID=$!
@@ -158,7 +162,7 @@ cleanup() {
         kill $OPENROUTER_PID 2>/dev/null
     fi
     if [ "$SERVER" = "all" ] || [ "$SERVER" = "llmlite" ]; then
-        kill $LLMLITE_PID 2>/dev/null
+        kill $LLMLITE_PID $LLMLITE_GATEWAY_PID 2>/dev/null
     fi
     if [ "$SERVER" = "all" ] || [ "$SERVER" = "braintrust" ]; then
         kill $BRAINTRUST_PID 2>/dev/null

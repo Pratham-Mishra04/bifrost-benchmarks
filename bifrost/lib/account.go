@@ -9,12 +9,14 @@ import (
 
 // CustomAccount implements the Account interface
 type BaseAccount struct {
-	apiKey string
+	apiKey   string
+	proxyURL string
 }
 
-func NewBaseAccount(apiKey string) *BaseAccount {
+func NewBaseAccount(apiKey string, proxyURL string) *BaseAccount {
 	return &BaseAccount{
-		apiKey: apiKey,
+		apiKey:   apiKey,
+		proxyURL: proxyURL,
 	}
 }
 
@@ -54,12 +56,12 @@ func (baseAccount *BaseAccount) GetConfigForProvider(providerKey interfaces.Supp
 		}
 
 		// Only set proxy configuration if proxy flag is provided
-		// if proxyURL != "" {
-		// config.ProxyConfig = &interfaces.ProxyConfig{
-		// 	Type: interfaces.HttpProxy,
-		// 	URL:  "http://localhost:8080",
-		// }
-		// }
+		if baseAccount.proxyURL != "" {
+			config.ProxyConfig = &interfaces.ProxyConfig{
+				Type: interfaces.HttpProxy,
+				URL:  baseAccount.proxyURL,
+			}
+		}
 
 		return config, nil
 	default:

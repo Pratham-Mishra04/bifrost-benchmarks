@@ -70,7 +70,7 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	// Initialize the Bifrost client with connection pooling
-	account := lib.NewBaseAccount(openaiKey)
+	account := lib.NewBaseAccount(openaiKey, proxyURL)
 	client, err := bifrost.Init(interfaces.BifrostConfig{
 		Account:         account,
 		Plugins:         []interfaces.Plugin{},

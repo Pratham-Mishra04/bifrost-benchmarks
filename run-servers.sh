@@ -128,10 +128,10 @@ if [ "$SERVER" = "all" ] || [ "$SERVER" = "llmlite" ]; then
     litellm --model gpt-4o-mini --port $LLMLITE_PORT &
     LLMLITE_GATEWAY_PID=$!
 
-    cd llmlite
-    python api.py --openai-key $OPENAI_API_KEY --port $LLMLITE_PORT &
-    LLMLITE_PID=$!
-    cd ..
+    # cd llmlite
+    # python api.py --openai-key $OPENAI_API_KEY --port $LLMLITE_PORT &
+    # LLMLITE_PID=$!
+    # cd ..
 fi
 
 if [ "$SERVER" = "all" ] || [ "$SERVER" = "braintrust" ]; then

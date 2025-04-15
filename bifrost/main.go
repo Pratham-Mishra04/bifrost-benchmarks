@@ -13,9 +13,9 @@ import (
 	"syscall"
 
 	"github.com/fasthttp/router"
-	"github.com/maximhq/bifrost"
 	"github.com/maximhq/bifrost-gateway/lib"
-	"github.com/maximhq/bifrost/interfaces"
+	"github.com/maximhq/bifrost/core"
+	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/valyala/fasthttp"
 )
 
@@ -61,8 +61,8 @@ func init() {
 }
 
 type ChatRequest struct {
-	Messages []interfaces.Message `json:"messages"`
-	Model    string               `json:"model"`
+	Messages []schemas.Message `json:"messages"`
+	Model    string            `json:"model"`
 }
 
 func main() {
@@ -71,11 +71,11 @@ func main() {
 
 	// Initialize the Bifrost client with connection pooling
 	account := lib.NewBaseAccount(openaiKey, proxyURL)
-	client, err := bifrost.Init(interfaces.BifrostConfig{
+	client, err := bifrost.Init(schemas.BifrostConfig{
 		Account:         account,
-		Plugins:         []interfaces.Plugin{},
+		Plugins:         []schemas.Plugin{},
 		Logger:          nil,
-		InitialPoolSize: 8000,
+		InitialPoolSize: 30000,
 	})
 	if err != nil {
 		log.Fatalf("Failed to initialize Bifrost: %v", err)
@@ -95,9 +95,9 @@ func main() {
 				return
 			}
 
-			bifrostReq := &interfaces.BifrostRequest{
+			bifrostReq := &schemas.BifrostRequest{
 				Model: chatReq.Model,
-				Input: interfaces.RequestInput{
+				Input: schemas.RequestInput{
 					ChatCompletionInput: &chatReq.Messages,
 				},
 			}
@@ -108,7 +108,7 @@ func main() {
 				return
 			}
 
-			resp, err := client.ChatCompletionRequest(interfaces.OpenAI, bifrostReq, ctx)
+			resp, err := client.ChatCompletionRequest(schemas.OpenAI, bifrostReq, ctx)
 			if err != nil {
 				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 				ctx.SetBodyString(fmt.Sprintf("error: %v", err))

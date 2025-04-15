@@ -53,10 +53,10 @@ type ServerMemStat struct {
 
 func main() {
 	// Define command line flags
-	rate := flag.Int("rate", 750, "Requests per second")
+	rate := flag.Int("rate", 1000, "Requests per second")
 	duration := flag.Int("duration", 10, "Duration of test in seconds")
 	outputFile := flag.String("output", "results.json", "Output file for results")
-	cooldown := flag.Int("cooldown", 10, "Cooldown period between tests in seconds")
+	cooldown := flag.Int("cooldown", 60, "Cooldown period between tests in seconds")
 	provider := flag.String("provider", "", "Specific provider to benchmark (bifrost, portkey, braintrust, llmlite, openrouter)")
 	flag.Parse()
 
@@ -108,8 +108,13 @@ func initializeProviders() []Provider {
 			{
 				"role": "user",
 				"content": "This is a benchmark request #{request_index} at #{timestamp}. " +
-					"Please provide a short response about the following topic: " +
-					"Explain the concept of Proxy Gateway in the context of AI. ",
+					"Please provide a comprehensive analysis of the following topics: " +
+					"1. Explain the concept of Proxy Gateway in the context of AI, including its architecture, benefits, and use cases. " +
+					"2. Discuss the role of load balancing and request routing in AI proxy gateways. " +
+					"3. Analyze the impact of caching and rate limiting on AI service performance. " +
+					"4. Describe common challenges in implementing AI proxy gateways and potential solutions. " +
+					"5. Compare different AI proxy gateway implementations and their trade-offs. " +
+					"Please provide detailed explanations with examples and technical details for each point. ",
 			},
 		},
 		"model": "gpt-4o-mini",
@@ -131,24 +136,24 @@ func initializeProviders() []Provider {
 			Port:     os.Getenv("PORTKEY_PORT"),
 			Payload:  payload,
 		},
-		{
-			Name:     "Braintrust",
-			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("BRAINTRUST_PORT")),
-			Port:     os.Getenv("BRAINTRUST_PORT"),
-			Payload:  payload,
-		},
+		// {
+		// 	Name:     "Braintrust",
+		// 	Endpoint: fmt.Sprintf(baseUrl, os.Getenv("BRAINTRUST_PORT")),
+		// 	Port:     os.Getenv("BRAINTRUST_PORT"),
+		// 	Payload:  payload,
+		// },
 		{
 			Name:     "LLMLite",
 			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("LLMLITE_PORT")),
 			Port:     os.Getenv("LLMLITE_PORT"),
 			Payload:  payload,
 		},
-		{
-			Name:     "OpenRouter",
-			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("OPENROUTER_PORT")),
-			Port:     os.Getenv("OPENROUTER_PORT"),
-			Payload:  payload,
-		},
+		// {
+		// 	Name:     "OpenRouter",
+		// 	Endpoint: fmt.Sprintf(baseUrl, os.Getenv("OPENROUTER_PORT")),
+		// 	Port:     os.Getenv("OPENROUTER_PORT"),
+		// 	Payload:  payload,
+		// },
 	}
 
 	return providers
@@ -468,7 +473,7 @@ func saveResults(results []BenchmarkResult, outputFile string) {
 			StatusCodeCounts:   statusCodes,
 			ServerPeakMemoryMB: float64(peakMem) / (1024 * 1024),
 			ServerAvgMemoryMB:  avgMem,
-			DropReasons:        res.DropReasons, // Include drop reasons in output
+			// DropReasons:        res.DropReasons, // Include drop reasons in output
 		}
 	}
 

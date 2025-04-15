@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/maximhq/bifrost/interfaces"
+	"github.com/maximhq/bifrost/core/schemas"
 )
 
 // CustomAccount implements the Account interface
@@ -20,9 +20,9 @@ func NewBaseAccount(apiKey string, proxyURL string) *BaseAccount {
 	}
 }
 
-func (a *BaseAccount) GetKeysForProvider(providerKey interfaces.SupportedModelProvider) ([]interfaces.Key, error) {
-	if providerKey == interfaces.OpenAI {
-		return []interfaces.Key{
+func (a *BaseAccount) GetKeysForProvider(providerKey schemas.ModelProvider) ([]schemas.Key, error) {
+	if providerKey == schemas.OpenAI {
+		return []schemas.Key{
 			{
 				Value:  a.apiKey,
 				Models: []string{"gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"},
@@ -34,31 +34,31 @@ func (a *BaseAccount) GetKeysForProvider(providerKey interfaces.SupportedModelPr
 	return nil, fmt.Errorf("unsupported provider: %s", providerKey)
 }
 
-func (baseAccount *BaseAccount) GetInitiallyConfiguredProviders() ([]interfaces.SupportedModelProvider, error) {
-	return []interfaces.SupportedModelProvider{interfaces.OpenAI}, nil
+func (baseAccount *BaseAccount) GetConfiguredProviders() ([]schemas.ModelProvider, error) {
+	return []schemas.ModelProvider{schemas.OpenAI}, nil
 }
 
 // GetConcurrencyAndBufferSizeForProvider returns the concurrency and buffer size settings for a provider
-func (baseAccount *BaseAccount) GetConfigForProvider(providerKey interfaces.SupportedModelProvider) (*interfaces.ProviderConfig, error) {
+func (baseAccount *BaseAccount) GetConfigForProvider(providerKey schemas.ModelProvider) (*schemas.ProviderConfig, error) {
 	switch providerKey {
-	case interfaces.OpenAI:
-		config := &interfaces.ProviderConfig{
-			NetworkConfig: interfaces.NetworkConfig{
-				DefaultRequestTimeoutInSeconds: 30,
+	case schemas.OpenAI:
+		config := &schemas.ProviderConfig{
+			NetworkConfig: schemas.NetworkConfig{
+				DefaultRequestTimeoutInSeconds: 12,
 				MaxRetries:                     3,
 				RetryBackoffInitial:            100 * time.Millisecond,
-				RetryBackoffMax:                2 * time.Second,
+				RetryBackoffMax:                5 * time.Second,
 			},
-			ConcurrencyAndBufferSize: interfaces.ConcurrencyAndBufferSize{
-				Concurrency: 8000,
-				BufferSize:  10000,
+			ConcurrencyAndBufferSize: schemas.ConcurrencyAndBufferSize{
+				Concurrency: 25000,
+				BufferSize:  30000,
 			},
 		}
 
 		// Only set proxy configuration if proxy flag is provided
 		if baseAccount.proxyURL != "" {
-			config.ProxyConfig = &interfaces.ProxyConfig{
-				Type: interfaces.HttpProxy,
+			config.ProxyConfig = &schemas.ProxyConfig{
+				Type: schemas.HttpProxy,
 				URL:  baseAccount.proxyURL,
 			}
 		}

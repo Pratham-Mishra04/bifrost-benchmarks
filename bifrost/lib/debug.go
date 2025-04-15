@@ -7,17 +7,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/maximhq/bifrost"
-	"github.com/maximhq/bifrost/interfaces"
+	"github.com/maximhq/bifrost/core"
+	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/valyala/fasthttp"
 )
 
 // RequestMetrics holds timing metrics from Bifrost
 type RequestMetrics struct {
-	TotalTime        time.Duration `json:"total_time"`
 	QueueWaitTime    time.Duration `json:"queue_wait_time"`
 	KeySelectionTime time.Duration `json:"key_selection_time"`
-	ProviderTime     time.Duration `json:"provider_time"`
 	PluginPreTime    time.Duration `json:"plugin_pre_time"`
 	PluginPostTime   time.Duration `json:"plugin_post_time"`
 	RequestCount     int64         `json:"request_count"`
@@ -26,14 +24,16 @@ type RequestMetrics struct {
 
 // ProviderTimings holds provider-specific timing metrics
 type ProviderTimings struct {
-	MessageFormatting      time.Duration `json:"message_formatting"`
-	ParamsPreparation      time.Duration `json:"params_preparation"`
-	RequestBodyPreparation time.Duration `json:"request_body_preparation"`
-	JSONMarshaling         time.Duration `json:"json_marshaling"`
-	RequestSetup           time.Duration `json:"request_setup"`
-	HTTPRequest            time.Duration `json:"http_request"`
-	ErrorHandling          time.Duration `json:"error_handling"`
-	ResponseParsing        time.Duration `json:"response_parsing"`
+	MessageFormatting      time.Duration `json:"message_formatting_time"`
+	ParamsPreparation      time.Duration `json:"params_preparation_time"`
+	RequestBodyPreparation time.Duration `json:"request_body_preparation_time"`
+	JSONMarshaling         time.Duration `json:"json_marshaling_time"`
+	RequestSetup           time.Duration `json:"request_setup_time"`
+	HTTPRequest            time.Duration `json:"http_request_time"`
+	ErrorHandling          time.Duration `json:"error_handling_time"`
+	ResponseParsing        time.Duration `json:"response_parsing_time"`
+	RequestSizeInBytes     int64         `json:"request_size_in_bytes"`
+	ResponseSizeInBytes    int64         `json:"response_size_in_bytes"`
 }
 
 // TimingStats holds timing statistics
@@ -62,71 +62,17 @@ var (
 	serverMetrics = &ServerMetrics{}
 )
 
-// ExtractMetrics extracts timing information from Bifrost response
-func ExtractMetrics(bifrostResp *interfaces.BifrostResponse) {
-	stats.mu.Lock()
-	defer stats.mu.Unlock()
-	stats.totalRequests++
-
-	if rawResponse, ok := bifrostResp.ExtraFields.RawResponse.(map[string]interface{}); ok {
-		var requestMetrics RequestMetrics
-		var providerTimings ProviderTimings
-
-		// Process bifrost_timings
-		if metrics, ok := rawResponse["bifrost_timings"]; ok {
-			if metricsMap, ok := metrics.(map[string]interface{}); ok {
-				if v, ok := metricsMap["total_time"].(float64); ok {
-					requestMetrics.TotalTime = time.Duration(v)
-				}
-				if v, ok := metricsMap["queue_wait_time"].(float64); ok {
-					requestMetrics.QueueWaitTime = time.Duration(v)
-				}
-				if v, ok := metricsMap["key_selection_time"].(float64); ok {
-					requestMetrics.KeySelectionTime = time.Duration(v)
-				}
-				if v, ok := metricsMap["provider_time"].(float64); ok {
-					requestMetrics.ProviderTime = time.Duration(v)
-				}
-				if v, ok := metricsMap["plugin_pre_time"].(float64); ok {
-					requestMetrics.PluginPreTime = time.Duration(v)
-				}
-				if v, ok := metricsMap["plugin_post_time"].(float64); ok {
-					requestMetrics.PluginPostTime = time.Duration(v)
-				}
-				stats.metrics = append(stats.metrics, requestMetrics)
-			}
-		}
-
-		// Process timings
-		if timings, ok := rawResponse["timings"]; ok {
-			if timingsMap, ok := timings.(map[string]interface{}); ok {
-				if v, ok := timingsMap["message_formatting"].(float64); ok {
-					providerTimings.MessageFormatting = time.Duration(v)
-				}
-				if v, ok := timingsMap["params_preparation"].(float64); ok {
-					providerTimings.ParamsPreparation = time.Duration(v)
-				}
-				if v, ok := timingsMap["request_body_preparation"].(float64); ok {
-					providerTimings.RequestBodyPreparation = time.Duration(v)
-				}
-				if v, ok := timingsMap["json_marshaling"].(float64); ok {
-					providerTimings.JSONMarshaling = time.Duration(v)
-				}
-				if v, ok := timingsMap["request_setup"].(float64); ok {
-					providerTimings.RequestSetup = time.Duration(v)
-				}
-				if v, ok := timingsMap["http_request"].(float64); ok {
-					providerTimings.HTTPRequest = time.Duration(v)
-				}
-				if v, ok := timingsMap["error_handling"].(float64); ok {
-					providerTimings.ErrorHandling = time.Duration(v)
-				}
-				if v, ok := timingsMap["response_parsing"].(float64); ok {
-					providerTimings.ResponseParsing = time.Duration(v)
-				}
-				stats.providerTimings = append(stats.providerTimings, providerTimings)
-			}
-		}
+func formatSmartDuration(ns int64) string {
+	avg := float64(ns)
+	switch {
+	case avg >= 1e9:
+		return fmt.Sprintf("%.2f s", avg/1e9)
+	case avg >= 1e6:
+		return fmt.Sprintf("%.2f ms", avg/1e6)
+	case avg >= 1e3:
+		return fmt.Sprintf("%.2f µs", avg/1e3)
+	default:
+		return fmt.Sprintf("%d ns", ns)
 	}
 }
 
@@ -142,10 +88,8 @@ func PrintStats() {
 	// Calculate averages for Bifrost metrics
 	var totalMetrics RequestMetrics
 	for _, m := range stats.metrics {
-		totalMetrics.TotalTime += m.TotalTime
 		totalMetrics.QueueWaitTime += m.QueueWaitTime
 		totalMetrics.KeySelectionTime += m.KeySelectionTime
-		totalMetrics.ProviderTime += m.ProviderTime
 		totalMetrics.PluginPreTime += m.PluginPreTime
 		totalMetrics.PluginPostTime += m.PluginPostTime
 		totalMetrics.RequestCount += m.RequestCount
@@ -163,6 +107,8 @@ func PrintStats() {
 		totalProviderTimings.HTTPRequest += t.HTTPRequest
 		totalProviderTimings.ErrorHandling += t.ErrorHandling
 		totalProviderTimings.ResponseParsing += t.ResponseParsing
+		totalProviderTimings.RequestSizeInBytes += t.RequestSizeInBytes
+		totalProviderTimings.ResponseSizeInBytes += t.ResponseSizeInBytes
 	}
 
 	// Calculate averages for timings
@@ -171,7 +117,7 @@ func PrintStats() {
 		totalTimings += t
 	}
 
-	avgTimings := float64(totalTimings) / float64(len(stats.timings)) / float64(time.Millisecond)
+	avgTimings := float64(totalTimings) / float64(len(stats.timings)) / float64(time.Nanosecond)
 
 	// Print final metrics
 	serverMetrics.mu.Lock()
@@ -186,44 +132,31 @@ func PrintStats() {
 
 	fmt.Printf("\nTiming Statistics:\n")
 	fmt.Printf("Total Requests: %d\n", stats.totalRequests)
+
 	fmt.Printf("\nBifrost Metrics (averages):\n")
-	fmt.Printf("Total Time: %.2f ms\n", float64(totalMetrics.TotalTime)/float64(stats.totalRequests)/float64(time.Millisecond))
-	fmt.Printf("Queue Wait Time: %.2f ms\n", float64(totalMetrics.QueueWaitTime)/float64(stats.totalRequests)/float64(time.Millisecond))
-	fmt.Printf("Key Selection Time: %.2f ms\n", float64(totalMetrics.KeySelectionTime)/float64(stats.totalRequests)/float64(time.Millisecond))
-	fmt.Printf("Provider Time: %.2f ms\n", float64(totalMetrics.ProviderTime)/float64(stats.totalRequests)/float64(time.Millisecond))
-	fmt.Printf("Plugin Pre Time: %.2f ms\n", float64(totalMetrics.PluginPreTime)/float64(stats.totalRequests)/float64(time.Millisecond))
-	fmt.Printf("Plugin Post Time: %.2f ms\n", float64(totalMetrics.PluginPostTime)/float64(stats.totalRequests)/float64(time.Millisecond))
+	fmt.Printf("Queue Wait Time: %s\n", formatSmartDuration(totalMetrics.QueueWaitTime.Nanoseconds()/int64(len(stats.providerTimings))))
+	fmt.Printf("Key Selection Time: %s\n", formatSmartDuration(totalMetrics.KeySelectionTime.Nanoseconds()/int64(len(stats.providerTimings))))
+	fmt.Printf("Plugin Pre Time: %s\n", formatSmartDuration(totalMetrics.PluginPreTime.Nanoseconds()/int64(len(stats.providerTimings))))
+	fmt.Printf("Plugin Post Time: %s\n", formatSmartDuration(totalMetrics.PluginPostTime.Nanoseconds()/int64(len(stats.providerTimings))))
 
 	fmt.Printf("\nProvider Timings (averages):\n")
-	fmt.Printf("Message Formatting: %.2f ms\n", float64(totalProviderTimings.MessageFormatting)/float64(stats.totalRequests)/float64(time.Millisecond))
-	fmt.Printf("Params Preparation: %.2f ms\n", float64(totalProviderTimings.ParamsPreparation)/float64(stats.totalRequests)/float64(time.Millisecond))
-	fmt.Printf("Request Body Preparation: %.2f ms\n", float64(totalProviderTimings.RequestBodyPreparation)/float64(stats.totalRequests)/float64(time.Millisecond))
-	fmt.Printf("JSON Marshaling: %.2f ms\n", float64(totalProviderTimings.JSONMarshaling)/float64(stats.totalRequests)/float64(time.Millisecond))
-	fmt.Printf("Request Setup: %.2f ms\n", float64(totalProviderTimings.RequestSetup)/float64(stats.totalRequests)/float64(time.Millisecond))
-	fmt.Printf("HTTP Request: %.2f ms\n", float64(totalProviderTimings.HTTPRequest)/float64(stats.totalRequests)/float64(time.Millisecond))
-	fmt.Printf("Error Handling: %.2f ms\n", float64(totalProviderTimings.ErrorHandling)/float64(stats.totalRequests)/float64(time.Millisecond))
-	fmt.Printf("Response Parsing: %.2f ms\n", float64(totalProviderTimings.ResponseParsing)/float64(stats.totalRequests)/float64(time.Millisecond))
+	fmt.Printf("Message Formatting: %s\n", formatSmartDuration(totalProviderTimings.MessageFormatting.Nanoseconds()/int64(len(stats.providerTimings))))
+	fmt.Printf("Params Preparation: %s\n", formatSmartDuration(totalProviderTimings.ParamsPreparation.Nanoseconds()/int64(len(stats.providerTimings))))
+	fmt.Printf("Request Body Preparation: %s\n", formatSmartDuration(totalProviderTimings.RequestBodyPreparation.Nanoseconds()/int64(len(stats.providerTimings))))
+	fmt.Printf("JSON Marshaling: %s\n", formatSmartDuration(totalProviderTimings.JSONMarshaling.Nanoseconds()/int64(len(stats.providerTimings))))
+	fmt.Printf("Request Setup: %s\n", formatSmartDuration(totalProviderTimings.RequestSetup.Nanoseconds()/int64(len(stats.providerTimings))))
+	fmt.Printf("HTTP Request: %s\n", formatSmartDuration(totalProviderTimings.HTTPRequest.Nanoseconds()/int64(len(stats.providerTimings))))
+	fmt.Printf("Error Handling: %s\n", formatSmartDuration(totalProviderTimings.ErrorHandling.Nanoseconds()/int64(len(stats.providerTimings))))
+	fmt.Printf("Response Parsing: %s\n", formatSmartDuration(totalProviderTimings.ResponseParsing.Nanoseconds()/int64(len(stats.providerTimings))))
+	fmt.Printf("Request Size: %.2f KB\n", float64(totalProviderTimings.RequestSizeInBytes)/float64(len(stats.providerTimings))/1024.0)
+	fmt.Printf("Response Size: %.2f KB\n", float64(totalProviderTimings.ResponseSizeInBytes)/float64(len(stats.providerTimings))/1024.0)
 
 	fmt.Printf("\nAverage Timings: %.2f ms\n", avgTimings)
 }
 
 type ChatRequest struct {
-	Messages []interfaces.Message `json:"messages"`
-	Model    string               `json:"model"`
-}
-
-// PrintServerMetrics prints server-level metrics
-func PrintServerMetrics() {
-	serverMetrics.mu.Lock()
-	defer serverMetrics.mu.Unlock()
-
-	fmt.Printf("\nServer Metrics:\n")
-	fmt.Printf("Total Requests: %d\n", serverMetrics.TotalRequests)
-	fmt.Printf("Successful Requests: %d\n", serverMetrics.SuccessfulRequests)
-	fmt.Printf("Dropped Requests: %d\n", serverMetrics.DroppedRequests)
-	fmt.Printf("Error Count: %d\n", serverMetrics.ErrorCount)
-	fmt.Printf("Last Error: %v\n", serverMetrics.LastError)
-	fmt.Printf("Last Error Time: %v\n", serverMetrics.LastErrorTime)
+	Messages []schemas.Message `json:"messages"`
+	Model    string            `json:"model"`
 }
 
 func DebugHandler(client *bifrost.Bifrost) func(ctx *fasthttp.RequestCtx) {
@@ -260,20 +193,20 @@ func DebugHandler(client *bifrost.Bifrost) func(ctx *fasthttp.RequestCtx) {
 		}
 
 		// Create Bifrost request
-		bifrostReq := &interfaces.BifrostRequest{
+		bifrostReq := &schemas.BifrostRequest{
 			Model: chatReq.Model,
-			Input: interfaces.RequestInput{
+			Input: schemas.RequestInput{
 				ChatCompletionInput: &chatReq.Messages,
 			},
 		}
 
 		// Make Bifrost API call with timeout
 		done := make(chan struct{})
-		var bifrostResp *interfaces.BifrostResponse
-		var bifrostErr *interfaces.BifrostError
+		var bifrostResp *schemas.BifrostResponse
+		var bifrostErr *schemas.BifrostError
 
 		go func() {
-			bifrostResp, bifrostErr = client.ChatCompletionRequest(interfaces.OpenAI, bifrostReq, nil)
+			bifrostResp, bifrostErr = client.ChatCompletionRequest(schemas.OpenAI, bifrostReq, nil)
 			close(done)
 		}()
 
@@ -301,7 +234,9 @@ func DebugHandler(client *bifrost.Bifrost) func(ctx *fasthttp.RequestCtx) {
 			serverMetrics.mu.Unlock()
 
 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-			ctx.SetBodyString(fmt.Sprintf("Error processing request: %v", bifrostErr.Error.Message))
+			ctx.SetContentType("application/json")
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			json.NewEncoder(ctx).Encode(bifrostErr)
 			return
 		}
 
@@ -314,68 +249,41 @@ func DebugHandler(client *bifrost.Bifrost) func(ctx *fasthttp.RequestCtx) {
 		stats.mu.Lock()
 		stats.totalRequests++
 
-		// Extract Bifrost metrics more efficiently
 		if rawResponse, ok := bifrostResp.ExtraFields.RawResponse.(map[string]interface{}); ok {
-			// Pre-allocate metrics
-			var requestMetrics RequestMetrics
-			var providerTimings ProviderTimings
-
 			// Process bifrost_timings
 			if metrics, ok := rawResponse["bifrost_timings"]; ok {
-				if metricsMap, ok := metrics.(map[string]interface{}); ok {
-					// Direct assignment to avoid marshal/unmarshal
-					if v, ok := metricsMap["total_time"].(float64); ok {
-						requestMetrics.TotalTime = time.Duration(v)
-					}
-					if v, ok := metricsMap["queue_wait_time"].(float64); ok {
-						requestMetrics.QueueWaitTime = time.Duration(v)
-					}
-					if v, ok := metricsMap["key_selection_time"].(float64); ok {
-						requestMetrics.KeySelectionTime = time.Duration(v)
-					}
-					if v, ok := metricsMap["provider_time"].(float64); ok {
-						requestMetrics.ProviderTime = time.Duration(v)
-					}
-					if v, ok := metricsMap["plugin_pre_time"].(float64); ok {
-						requestMetrics.PluginPreTime = time.Duration(v)
-					}
-					if v, ok := metricsMap["plugin_post_time"].(float64); ok {
-						requestMetrics.PluginPostTime = time.Duration(v)
-					}
-					stats.metrics = append(stats.metrics, requestMetrics)
+				// Convert to JSON bytes first
+				jsonBytes, err := json.Marshal(metrics)
+				if err != nil {
+					fmt.Printf("Error marshaling bifrost_timings: %v\n", err)
+					return
 				}
+				// Unmarshal into RequestMetrics
+				var requestMetrics RequestMetrics
+				if err := json.Unmarshal(jsonBytes, &requestMetrics); err != nil {
+					fmt.Printf("Error unmarshaling bifrost_timings: %v\n", err)
+					return
+				}
+				stats.metrics = append(stats.metrics, requestMetrics)
 			}
 
-			// Process timings
-			if timings, ok := rawResponse["timings"]; ok {
-				if timingsMap, ok := timings.(map[string]interface{}); ok {
-					// Direct assignment to avoid marshal/unmarshal
-					if v, ok := timingsMap["message_formatting"].(float64); ok {
-						providerTimings.MessageFormatting = time.Duration(v)
-					}
-					if v, ok := timingsMap["params_preparation"].(float64); ok {
-						providerTimings.ParamsPreparation = time.Duration(v)
-					}
-					if v, ok := timingsMap["request_body_preparation"].(float64); ok {
-						providerTimings.RequestBodyPreparation = time.Duration(v)
-					}
-					if v, ok := timingsMap["json_marshaling"].(float64); ok {
-						providerTimings.JSONMarshaling = time.Duration(v)
-					}
-					if v, ok := timingsMap["request_setup"].(float64); ok {
-						providerTimings.RequestSetup = time.Duration(v)
-					}
-					if v, ok := timingsMap["http_request"].(float64); ok {
-						providerTimings.HTTPRequest = time.Duration(v)
-					}
-					if v, ok := timingsMap["error_handling"].(float64); ok {
-						providerTimings.ErrorHandling = time.Duration(v)
-					}
-					if v, ok := timingsMap["response_parsing"].(float64); ok {
-						providerTimings.ResponseParsing = time.Duration(v)
-					}
-					stats.providerTimings = append(stats.providerTimings, providerTimings)
+			// Process provider_timings
+			if timings, ok := rawResponse["provider_timings"]; ok {
+				// Convert to JSON bytes first
+				jsonBytes, err := json.Marshal(timings)
+				if err != nil {
+					fmt.Printf("Error marshaling provider_timings: %v\n", err)
+					return
 				}
+
+				// Unmarshal into ProviderTimings
+				var providerTimings ProviderTimings
+				if err := json.Unmarshal(jsonBytes, &providerTimings); err != nil {
+					fmt.Printf("Error unmarshaling provider_timings: %v\n", err)
+					return
+				}
+
+				stats.providerTimings = append(stats.providerTimings, providerTimings)
 			}
 		}
 

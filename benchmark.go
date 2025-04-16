@@ -58,10 +58,12 @@ func main() {
 	outputFile := flag.String("output", "results.json", "Output file for results")
 	cooldown := flag.Int("cooldown", 60, "Cooldown period between tests in seconds")
 	provider := flag.String("provider", "", "Specific provider to benchmark (bifrost, portkey, braintrust, llmlite, openrouter)")
+	bigPayload := flag.Bool("big-payload", false, "Use a bigger payload")
+
 	flag.Parse()
 
 	// Initialize providers
-	providers := initializeProviders()
+	providers := initializeProviders(*bigPayload)
 
 	// Filter providers if specific provider is requested
 	if *provider != "" {
@@ -96,29 +98,58 @@ func getProviderNames(providers []Provider) []string {
 	return names
 }
 
-func initializeProviders() []Provider {
+func initializeProviders(bigPayload bool) []Provider {
 	// Load environment variables from .env file
 	if err := godotenv.Load(); err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
-	// Create payload template with dynamic content placeholders
-	payload, _ := json.Marshal(map[string]interface{}{
-		"messages": []map[string]string{
-			{
-				"role": "user",
-				"content": "This is a benchmark request #{request_index} at #{timestamp}. " +
-					"Please provide a comprehensive analysis of the following topics: " +
-					"1. Explain the concept of Proxy Gateway in the context of AI, including its architecture, benefits, and use cases. " +
-					"2. Discuss the role of load balancing and request routing in AI proxy gateways. " +
-					"3. Analyze the impact of caching and rate limiting on AI service performance. " +
-					"4. Describe common challenges in implementing AI proxy gateways and potential solutions. " +
-					"5. Compare different AI proxy gateway implementations and their trade-offs. " +
-					"Please provide detailed explanations with examples and technical details for each point. ",
+	var payload []byte
+
+	if bigPayload {
+		// Create payload template with dynamic content placeholders
+		payload, _ = json.Marshal(map[string]interface{}{
+			"messages": []map[string]string{
+				{
+					"role": "user",
+					"content": "This is a benchmark request #{request_index} at #{timestamp}. " +
+						"Please provide a comprehensive analysis of the following topics: " +
+						"1. Explain the concept of Proxy Gateway in the context of AI, including its architecture, benefits, and use cases. " +
+						"2. Discuss the role of load balancing and request routing in AI proxy gateways. " +
+						"3. Analyze the impact of caching and rate limiting on AI service performance. " +
+						"4. Describe common challenges in implementing AI proxy gateways and potential solutions. " +
+						"5. Compare different AI proxy gateway implementations and their trade-offs. " +
+						"6. What is the difference between a proxy gateway and a reverse proxy? " +
+						"7. What is the difference between a proxy gateway and a load balancer? " +
+						"8. What is the difference between a proxy gateway and a web server? " +
+						"9. What is the difference between a proxy gateway and a CDN? " +
+						"10. What is the difference between a proxy gateway and a firewall? " +
+						"11. What is the difference between a proxy gateway and a VPN? " +
+						"12. What is the difference between a proxy gateway and a WAF? " +
+						"13. What is the difference between a proxy gateway and a DDoS protection service? " +
+						"14. What is the difference between a proxy gateway and a DNS server? " +
+						"15. What is the difference between a proxy gateway and a web application firewall? " +
+						"16. What is the difference between a proxy gateway and a load balancer? " +
+						"17. What is the difference between a proxy gateway and a web server? " +
+						"18. What is the difference between a proxy gateway and a CDN? " +
+						"19. What is the difference between a proxy gateway and a firewall? " +
+						"20. What is the difference between a proxy gateway and a VPN? " +
+						"Please provide detailed explanations with examples and technical details for each point. ",
+				},
 			},
-		},
-		"model": "gpt-4o-mini",
-	})
+			"model": "gpt-4o-mini",
+		})
+	} else {
+		payload, _ = json.Marshal(map[string]interface{}{
+			"messages": []map[string]string{
+				{
+					"role":    "user",
+					"content": "This is a benchmark request #{request_index} at #{timestamp}. How are you?",
+				},
+			},
+			"model": "gpt-4o-mini",
+		})
+	}
 
 	baseUrl := "http://localhost:%s/v1/chat/completions"
 

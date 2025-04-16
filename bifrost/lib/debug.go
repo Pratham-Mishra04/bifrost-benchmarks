@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/maximhq/bifrost/core"
+	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/valyala/fasthttp"
 )
@@ -22,16 +22,16 @@ type RequestMetrics struct {
 	ErrorCount       int64         `json:"error_count"`
 }
 
-// ProviderTimings holds provider-specific timing metrics
-type ProviderTimings struct {
-	MessageFormatting      time.Duration `json:"message_formatting_time"`
-	ParamsPreparation      time.Duration `json:"params_preparation_time"`
-	RequestBodyPreparation time.Duration `json:"request_body_preparation_time"`
-	JSONMarshaling         time.Duration `json:"json_marshaling_time"`
-	RequestSetup           time.Duration `json:"request_setup_time"`
-	HTTPRequest            time.Duration `json:"http_request_time"`
-	ErrorHandling          time.Duration `json:"error_handling_time"`
-	ResponseParsing        time.Duration `json:"response_parsing_time"`
+// ProviderMetrics holds provider-specific timing metrics
+type ProviderMetrics struct {
+	MessageFormatting      time.Duration `json:"message_formatting"`
+	ParamsPreparation      time.Duration `json:"params_preparation"`
+	RequestBodyPreparation time.Duration `json:"request_body_preparation"`
+	JSONMarshaling         time.Duration `json:"json_marshaling"`
+	RequestSetup           time.Duration `json:"request_setup"`
+	HTTPRequest            time.Duration `json:"http_request"`
+	ErrorHandling          time.Duration `json:"error_handling"`
+	ResponseParsing        time.Duration `json:"response_parsing"`
 	RequestSizeInBytes     int64         `json:"request_size_in_bytes"`
 	ResponseSizeInBytes    int64         `json:"response_size_in_bytes"`
 }
@@ -42,7 +42,7 @@ type TimingStats struct {
 	totalRequests   int
 	metrics         []RequestMetrics
 	timings         []time.Duration
-	providerTimings []ProviderTimings
+	providerMetrics []ProviderMetrics
 }
 
 // ServerMetrics tracks server-level metrics
@@ -97,18 +97,18 @@ func PrintStats() {
 	}
 
 	// Calculate averages for provider timings
-	var totalProviderTimings ProviderTimings
-	for _, t := range stats.providerTimings {
-		totalProviderTimings.MessageFormatting += t.MessageFormatting
-		totalProviderTimings.ParamsPreparation += t.ParamsPreparation
-		totalProviderTimings.RequestBodyPreparation += t.RequestBodyPreparation
-		totalProviderTimings.JSONMarshaling += t.JSONMarshaling
-		totalProviderTimings.RequestSetup += t.RequestSetup
-		totalProviderTimings.HTTPRequest += t.HTTPRequest
-		totalProviderTimings.ErrorHandling += t.ErrorHandling
-		totalProviderTimings.ResponseParsing += t.ResponseParsing
-		totalProviderTimings.RequestSizeInBytes += t.RequestSizeInBytes
-		totalProviderTimings.ResponseSizeInBytes += t.ResponseSizeInBytes
+	var totalProviderMetrics ProviderMetrics
+	for _, t := range stats.providerMetrics {
+		totalProviderMetrics.MessageFormatting += t.MessageFormatting
+		totalProviderMetrics.ParamsPreparation += t.ParamsPreparation
+		totalProviderMetrics.RequestBodyPreparation += t.RequestBodyPreparation
+		totalProviderMetrics.JSONMarshaling += t.JSONMarshaling
+		totalProviderMetrics.RequestSetup += t.RequestSetup
+		totalProviderMetrics.HTTPRequest += t.HTTPRequest
+		totalProviderMetrics.ErrorHandling += t.ErrorHandling
+		totalProviderMetrics.ResponseParsing += t.ResponseParsing
+		totalProviderMetrics.RequestSizeInBytes += t.RequestSizeInBytes
+		totalProviderMetrics.ResponseSizeInBytes += t.ResponseSizeInBytes
 	}
 
 	// Calculate averages for timings
@@ -116,8 +116,6 @@ func PrintStats() {
 	for _, t := range stats.timings {
 		totalTimings += t
 	}
-
-	avgTimings := float64(totalTimings) / float64(len(stats.timings)) / float64(time.Nanosecond)
 
 	// Print final metrics
 	serverMetrics.mu.Lock()
@@ -134,24 +132,33 @@ func PrintStats() {
 	fmt.Printf("Total Requests: %d\n", stats.totalRequests)
 
 	fmt.Printf("\nBifrost Metrics (averages):\n")
-	fmt.Printf("Queue Wait Time: %s\n", formatSmartDuration(totalMetrics.QueueWaitTime.Nanoseconds()/int64(len(stats.providerTimings))))
-	fmt.Printf("Key Selection Time: %s\n", formatSmartDuration(totalMetrics.KeySelectionTime.Nanoseconds()/int64(len(stats.providerTimings))))
-	fmt.Printf("Plugin Pre Time: %s\n", formatSmartDuration(totalMetrics.PluginPreTime.Nanoseconds()/int64(len(stats.providerTimings))))
-	fmt.Printf("Plugin Post Time: %s\n", formatSmartDuration(totalMetrics.PluginPostTime.Nanoseconds()/int64(len(stats.providerTimings))))
+	// Check if we have provider timings to avoid division by zero
+	if len(stats.providerMetrics) > 0 {
+		fmt.Printf("Queue Wait Time: %s\n", formatSmartDuration(totalMetrics.QueueWaitTime.Nanoseconds()/int64(len(stats.providerMetrics))))
+		fmt.Printf("Key Selection Time: %s\n", formatSmartDuration(totalMetrics.KeySelectionTime.Nanoseconds()/int64(len(stats.providerMetrics))))
+		fmt.Printf("Plugin Pre Time: %s\n", formatSmartDuration(totalMetrics.PluginPreTime.Nanoseconds()/int64(len(stats.providerMetrics))))
+		fmt.Printf("Plugin Post Time: %s\n", formatSmartDuration(totalMetrics.PluginPostTime.Nanoseconds()/int64(len(stats.providerMetrics))))
 
-	fmt.Printf("\nProvider Timings (averages):\n")
-	fmt.Printf("Message Formatting: %s\n", formatSmartDuration(totalProviderTimings.MessageFormatting.Nanoseconds()/int64(len(stats.providerTimings))))
-	fmt.Printf("Params Preparation: %s\n", formatSmartDuration(totalProviderTimings.ParamsPreparation.Nanoseconds()/int64(len(stats.providerTimings))))
-	fmt.Printf("Request Body Preparation: %s\n", formatSmartDuration(totalProviderTimings.RequestBodyPreparation.Nanoseconds()/int64(len(stats.providerTimings))))
-	fmt.Printf("JSON Marshaling: %s\n", formatSmartDuration(totalProviderTimings.JSONMarshaling.Nanoseconds()/int64(len(stats.providerTimings))))
-	fmt.Printf("Request Setup: %s\n", formatSmartDuration(totalProviderTimings.RequestSetup.Nanoseconds()/int64(len(stats.providerTimings))))
-	fmt.Printf("HTTP Request: %s\n", formatSmartDuration(totalProviderTimings.HTTPRequest.Nanoseconds()/int64(len(stats.providerTimings))))
-	fmt.Printf("Error Handling: %s\n", formatSmartDuration(totalProviderTimings.ErrorHandling.Nanoseconds()/int64(len(stats.providerTimings))))
-	fmt.Printf("Response Parsing: %s\n", formatSmartDuration(totalProviderTimings.ResponseParsing.Nanoseconds()/int64(len(stats.providerTimings))))
-	fmt.Printf("Request Size: %.2f KB\n", float64(totalProviderTimings.RequestSizeInBytes)/float64(len(stats.providerTimings))/1024.0)
-	fmt.Printf("Response Size: %.2f KB\n", float64(totalProviderTimings.ResponseSizeInBytes)/float64(len(stats.providerTimings))/1024.0)
+		fmt.Printf("\nProvider Timings (averages):\n")
+		fmt.Printf("Message Formatting: %s\n", formatSmartDuration(totalProviderMetrics.MessageFormatting.Nanoseconds()/int64(len(stats.providerMetrics))))
+		fmt.Printf("Params Preparation: %s\n", formatSmartDuration(totalProviderMetrics.ParamsPreparation.Nanoseconds()/int64(len(stats.providerMetrics))))
+		fmt.Printf("Request Body Preparation: %s\n", formatSmartDuration(totalProviderMetrics.RequestBodyPreparation.Nanoseconds()/int64(len(stats.providerMetrics))))
+		fmt.Printf("JSON Marshaling: %s\n", formatSmartDuration(totalProviderMetrics.JSONMarshaling.Nanoseconds()/int64(len(stats.providerMetrics))))
+		fmt.Printf("Request Setup: %s\n", formatSmartDuration(totalProviderMetrics.RequestSetup.Nanoseconds()/int64(len(stats.providerMetrics))))
+		fmt.Printf("HTTP Request: %s\n", formatSmartDuration(totalProviderMetrics.HTTPRequest.Nanoseconds()/int64(len(stats.providerMetrics))))
+		fmt.Printf("Error Handling: %s\n", formatSmartDuration(totalProviderMetrics.ErrorHandling.Nanoseconds()/int64(len(stats.providerMetrics))))
+		fmt.Printf("Response Parsing: %s\n", formatSmartDuration(totalProviderMetrics.ResponseParsing.Nanoseconds()/int64(len(stats.providerMetrics))))
+		fmt.Printf("Request Size: %.2f KB\n", float64(totalProviderMetrics.RequestSizeInBytes)/float64(len(stats.providerMetrics))/1024.0)
+		fmt.Printf("Response Size: %.2f KB\n", float64(totalProviderMetrics.ResponseSizeInBytes)/float64(len(stats.providerMetrics))/1024.0)
+	} else {
+		fmt.Println("No provider timing data available")
+	}
 
-	fmt.Printf("\nAverage Timings: %.2f ms\n", avgTimings)
+	// Only calculate average timings if we have data
+	if len(stats.timings) > 0 {
+		avgTimings := float64(totalTimings) / float64(len(stats.timings)) / float64(time.Nanosecond)
+		fmt.Printf("\nAverage Timings: %.2f ms\n", avgTimings)
+	}
 }
 
 type ChatRequest struct {
@@ -267,23 +274,23 @@ func DebugHandler(client *bifrost.Bifrost) func(ctx *fasthttp.RequestCtx) {
 				stats.metrics = append(stats.metrics, requestMetrics)
 			}
 
-			// Process provider_timings
-			if timings, ok := rawResponse["provider_timings"]; ok {
+			// Process provider_metrics
+			if metrics, ok := rawResponse["provider_metrics"]; ok {
 				// Convert to JSON bytes first
-				jsonBytes, err := json.Marshal(timings)
+				jsonBytes, err := json.Marshal(metrics)
 				if err != nil {
-					fmt.Printf("Error marshaling provider_timings: %v\n", err)
+					fmt.Printf("Error marshaling provider_metrics: %v\n", err)
 					return
 				}
 
-				// Unmarshal into ProviderTimings
-				var providerTimings ProviderTimings
-				if err := json.Unmarshal(jsonBytes, &providerTimings); err != nil {
-					fmt.Printf("Error unmarshaling provider_timings: %v\n", err)
+				// Unmarshal into ProviderMetrics
+				var providerMetrics ProviderMetrics
+				if err := json.Unmarshal(jsonBytes, &providerMetrics); err != nil {
+					fmt.Printf("Error unmarshaling provider_metrics: %v\n", err)
 					return
 				}
 
-				stats.providerTimings = append(stats.providerTimings, providerTimings)
+				stats.providerMetrics = append(stats.providerMetrics, providerMetrics)
 			}
 		}
 

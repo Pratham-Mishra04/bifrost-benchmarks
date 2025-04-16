@@ -11,12 +11,17 @@ import (
 type BaseAccount struct {
 	apiKey   string
 	proxyURL string
+
+	concurrency int
+	bufferSize  int
 }
 
-func NewBaseAccount(apiKey string, proxyURL string) *BaseAccount {
+func NewBaseAccount(apiKey string, proxyURL string, concurrency int, bufferSize int) *BaseAccount {
 	return &BaseAccount{
-		apiKey:   apiKey,
-		proxyURL: proxyURL,
+		apiKey:      apiKey,
+		proxyURL:    proxyURL,
+		concurrency: concurrency,
+		bufferSize:  bufferSize,
 	}
 }
 
@@ -50,8 +55,8 @@ func (baseAccount *BaseAccount) GetConfigForProvider(providerKey schemas.ModelPr
 				RetryBackoffMax:                5 * time.Second,
 			},
 			ConcurrencyAndBufferSize: schemas.ConcurrencyAndBufferSize{
-				Concurrency: 25000,
-				BufferSize:  30000,
+				Concurrency: baseAccount.concurrency,
+				BufferSize:  baseAccount.bufferSize,
 			},
 		}
 

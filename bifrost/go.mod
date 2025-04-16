@@ -7,6 +7,7 @@ replace github.com/maximhq/bifrost/core => ../../bifrost/core
 require github.com/maximhq/bifrost/core v1.0.0
 
 require (
+	github.com/maximhq/maxim-go v0.1.1 // indirect
 	golang.org/x/net v0.39.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 )

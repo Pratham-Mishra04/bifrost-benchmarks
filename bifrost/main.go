@@ -14,7 +14,7 @@ import (
 
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost-gateway/lib"
-	"github.com/maximhq/bifrost/core"
+	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/valyala/fasthttp"
 )
@@ -24,6 +24,10 @@ var (
 	port      string
 	proxyURL  string
 	debug     bool
+
+	concurrency     int
+	bufferSize      int
+	initialPoolSize int
 )
 
 func init() {
@@ -31,6 +35,11 @@ func init() {
 	flag.StringVar(&port, "port", "3001", "Port to run the server on")
 	flag.StringVar(&proxyURL, "proxy", "", "Proxy URL (e.g., http://localhost:8080)")
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
+
+	flag.IntVar(&concurrency, "concurrency", 25000, "Concurrency level")
+	flag.IntVar(&bufferSize, "buffer-size", 30000, "Buffer size")
+	flag.IntVar(&initialPoolSize, "initial-pool-size", 30000, "Initial pool size")
+
 	flag.Parse()
 
 	if openaiKey == "" {
@@ -70,12 +79,12 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	// Initialize the Bifrost client with connection pooling
-	account := lib.NewBaseAccount(openaiKey, proxyURL)
+	account := lib.NewBaseAccount(openaiKey, proxyURL, concurrency, bufferSize)
 	client, err := bifrost.Init(schemas.BifrostConfig{
 		Account:         account,
 		Plugins:         []schemas.Plugin{},
 		Logger:          nil,
-		InitialPoolSize: 30000,
+		InitialPoolSize: initialPoolSize,
 	})
 	if err != nil {
 		log.Fatalf("Failed to initialize Bifrost: %v", err)

@@ -4,6 +4,7 @@ go 1.24.1
 
 require (
 	github.com/joho/godotenv v1.5.1
+	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/tsenart/vegeta/v12 v12.12.0
 )

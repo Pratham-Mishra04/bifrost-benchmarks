@@ -29,3 +29,7 @@ Inside that second terminal, you can now:
 
 curl http://localhost:3001
 It should hit the Go server running in the first terminal.
+
+go run main.go --concurrency 20000 --buffer-size 20000 --initial-pool-size 20000 --debug
+
+go run benchmark.go --provider bifrost --rate 10000

@@ -201,7 +201,8 @@ func DebugHandler(client *bifrost.Bifrost) func(ctx *fasthttp.RequestCtx) {
 
 		// Create Bifrost request
 		bifrostReq := &schemas.BifrostRequest{
-			Model: chatReq.Model,
+			Provider: schemas.OpenAI,
+			Model:    chatReq.Model,
 			Input: schemas.RequestInput{
 				ChatCompletionInput: &chatReq.Messages,
 			},
@@ -213,7 +214,7 @@ func DebugHandler(client *bifrost.Bifrost) func(ctx *fasthttp.RequestCtx) {
 		var bifrostErr *schemas.BifrostError
 
 		go func() {
-			bifrostResp, bifrostErr = client.ChatCompletionRequest(schemas.OpenAI, bifrostReq, nil)
+			bifrostResp, bifrostErr = client.ChatCompletionRequest(ctx, bifrostReq)
 			close(done)
 		}()
 

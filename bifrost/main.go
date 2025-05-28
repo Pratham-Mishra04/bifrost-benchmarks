@@ -36,9 +36,9 @@ func init() {
 	flag.StringVar(&proxyURL, "proxy", "", "Proxy URL (e.g., http://localhost:8080)")
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
 
-	flag.IntVar(&concurrency, "concurrency", 25000, "Concurrency level")
-	flag.IntVar(&bufferSize, "buffer-size", 30000, "Buffer size")
-	flag.IntVar(&initialPoolSize, "initial-pool-size", 30000, "Initial pool size")
+	flag.IntVar(&concurrency, "concurrency", 2000, "Concurrency level")
+	flag.IntVar(&bufferSize, "buffer-size", 2500, "Buffer size")
+	flag.IntVar(&initialPoolSize, "initial-pool-size", 2500, "Initial pool size")
 
 	flag.Parse()
 
@@ -105,7 +105,8 @@ func main() {
 			}
 
 			bifrostReq := &schemas.BifrostRequest{
-				Model: chatReq.Model,
+				Provider: schemas.OpenAI,
+				Model:    chatReq.Model,
 				Input: schemas.RequestInput{
 					ChatCompletionInput: &chatReq.Messages,
 				},
@@ -117,7 +118,7 @@ func main() {
 				return
 			}
 
-			resp, err := client.ChatCompletionRequest(schemas.OpenAI, bifrostReq, ctx)
+			resp, err := client.ChatCompletionRequest(ctx, bifrostReq)
 			if err != nil {
 				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 				ctx.SetBodyString(fmt.Sprintf("error: %v", err))

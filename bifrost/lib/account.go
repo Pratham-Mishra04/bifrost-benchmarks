@@ -58,6 +58,10 @@ func (baseAccount *BaseAccount) GetConfigForProvider(providerKey schemas.ModelPr
 				Concurrency: baseAccount.concurrency,
 				BufferSize:  baseAccount.bufferSize,
 			},
+			ProxyConfig: &schemas.ProxyConfig{
+				Type: schemas.HttpProxy,
+				URL:  baseAccount.proxyURL,
+			},
 		}
 
 		// Only set proxy configuration if proxy flag is provided

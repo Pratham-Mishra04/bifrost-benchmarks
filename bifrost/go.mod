@@ -2,13 +2,13 @@ module github.com/maximhq/bifrost-gateway
 
 go 1.24.1
 
-replace github.com/maximhq/bifrost/core => ../../bifrost/core
-
-require github.com/maximhq/bifrost/core v1.0.0
+require github.com/maximhq/bifrost/core v1.0.7
 
 require (
-	github.com/maximhq/maxim-go v0.1.1 // indirect
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
+	github.com/goccy/go-json v0.10.5 // indirect
 	golang.org/x/net v0.39.0 // indirect
+	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 )
 

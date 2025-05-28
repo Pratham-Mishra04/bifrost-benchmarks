@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/shirou/gopsutil/net"
 	"github.com/shirou/gopsutil/v3/process"
 	vegeta "github.com/tsenart/vegeta/v12/lib"
 )
@@ -53,7 +54,7 @@ type ServerMemStat struct {
 
 func main() {
 	// Define command line flags
-	rate := flag.Int("rate", 1000, "Requests per second")
+	rate := flag.Int("rate", 500, "Requests per second")
 	duration := flag.Int("duration", 10, "Duration of test in seconds")
 	outputFile := flag.String("output", "results.json", "Output file for results")
 	cooldown := flag.Int("cooldown", 60, "Cooldown period between tests in seconds")
@@ -162,23 +163,29 @@ func initializeProviders(bigPayload bool) []Provider {
 			Payload:  payload,
 		},
 		{
-			Name:     "Portkey",
-			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("PORTKEY_PORT")),
-			Port:     os.Getenv("PORTKEY_PORT"),
+			Name:     "Litellm",
+			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("LITELLM_PORT")),
+			Port:     os.Getenv("LITELLM_PORT"),
 			Payload:  payload,
 		},
+		// {
+		// 	Name:     "Portkey",
+		// 	Endpoint: fmt.Sprintf(baseUrl, os.Getenv("PORTKEY_PORT")),
+		// 	Port:     os.Getenv("PORTKEY_PORT"),
+		// 	Payload:  payload,
+		// },
 		// {
 		// 	Name:     "Braintrust",
 		// 	Endpoint: fmt.Sprintf(baseUrl, os.Getenv("BRAINTRUST_PORT")),
 		// 	Port:     os.Getenv("BRAINTRUST_PORT"),
 		// 	Payload:  payload,
 		// },
-		{
-			Name:     "LLMLite",
-			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("LLMLITE_PORT")),
-			Port:     os.Getenv("LLMLITE_PORT"),
-			Payload:  payload,
-		},
+		// {
+		// 	Name:     "LLMLite",
+		// 	Endpoint: fmt.Sprintf(baseUrl, os.Getenv("LLMLITE_PORT")),
+		// 	Port:     os.Getenv("LLMLITE_PORT"),
+		// 	Payload:  payload,
+		// },
 		// {
 		// 	Name:     "OpenRouter",
 		// 	Endpoint: fmt.Sprintf(baseUrl, os.Getenv("OPENROUTER_PORT")),
@@ -206,7 +213,7 @@ func runBenchmarks(providers []Provider, rate int, duration int, cooldown int) [
 
 		httpClient := &http.Client{
 			Transport: httpTransport,
-			Timeout:   30 * time.Second, // adjust as necessary
+			Timeout:   240 * time.Second, // adjust as necessary
 		}
 
 		// Define the attack
@@ -237,7 +244,7 @@ func runBenchmarks(providers []Provider, rate int, duration int, cooldown int) [
 
 		// Create context with timeout for the attack
 		ctx, cancel := context.WithTimeout(context.Background(),
-			time.Duration(duration+30)*time.Second) // 30s buffer
+			time.Duration(240)*time.Second) // Changed to 240s
 		defer cancel()
 
 		// Run the benchmark
@@ -328,22 +335,20 @@ func getProcessByPort(port string) (*process.Process, error) {
 		return nil, fmt.Errorf("invalid port number: %v", err)
 	}
 
-	// Get all processes and check their connections
-	processes, err := process.Processes()
+	conns, err := net.Connections("tcp")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get processes: %v", err)
+		return nil, fmt.Errorf("failed to get connections: %v", err)
 	}
 
-	for _, p := range processes {
-		conns, err := p.Connections()
-		if err != nil {
-			continue
-		}
-		for _, conn := range conns {
-			if conn.Laddr.Port == uint32(portNum) {
-				fmt.Println("Found process for port:", port)
-				return p, nil
+	for _, conn := range conns {
+		if conn.Laddr.Port == uint32(portNum) && conn.Status == "LISTEN" {
+			p, err := process.NewProcess(conn.Pid)
+			if err != nil {
+				continue
 			}
+			cmdline, _ := p.Cmdline()
+			fmt.Printf("Found process on port %s: PID=%d, Cmdline=%s\n", port, conn.Pid, cmdline)
+			return p, nil
 		}
 	}
 

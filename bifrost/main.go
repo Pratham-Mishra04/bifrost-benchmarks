@@ -138,8 +138,6 @@ func main() {
 	server := &fasthttp.Server{
 		Handler:               r.Handler,
 		NoDefaultServerHeader: true,
-		ReduceMemoryUsage:     false,
-		DisableKeepalive:      false,
 		TCPKeepalive:          true,
 		Concurrency:           0, // unlimited concurrent connections
 	}

@@ -60,11 +60,12 @@ func main() {
 	cooldown := flag.Int("cooldown", 60, "Cooldown period between tests in seconds")
 	provider := flag.String("provider", "", "Specific provider to benchmark (bifrost, portkey, braintrust, llmlite, openrouter)")
 	bigPayload := flag.Bool("big-payload", false, "Use a bigger payload")
+	model := flag.String("model", "gpt-4o-mini", "Model to use")
 
 	flag.Parse()
 
 	// Initialize providers
-	providers := initializeProviders(*bigPayload)
+	providers := initializeProviders(*bigPayload, *model)
 
 	// Filter providers if specific provider is requested
 	if *provider != "" {
@@ -99,7 +100,7 @@ func getProviderNames(providers []Provider) []string {
 	return names
 }
 
-func initializeProviders(bigPayload bool) []Provider {
+func initializeProviders(bigPayload bool, model string) []Provider {
 	// Load environment variables from .env file
 	if err := godotenv.Load(); err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
@@ -138,7 +139,8 @@ func initializeProviders(bigPayload bool) []Provider {
 						"Please provide detailed explanations with examples and technical details for each point. ",
 				},
 			},
-			"model": "gpt-4o-mini",
+			"provider": "openai",
+			"model":    model,
 		})
 	} else {
 		payload, _ = json.Marshal(map[string]interface{}{
@@ -148,7 +150,8 @@ func initializeProviders(bigPayload bool) []Provider {
 					"content": "This is a benchmark request #{request_index} at #{timestamp}. How are you?",
 				},
 			},
-			"model": "gpt-4o-mini",
+			"provider": "openai",
+			"model":    model,
 		})
 	}
 
@@ -192,6 +195,12 @@ func initializeProviders(bigPayload bool) []Provider {
 		// 	Port:     os.Getenv("OPENROUTER_PORT"),
 		// 	Payload:  payload,
 		// },
+		{
+			Name:     "Helicone",
+			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("HELICONE_PORT")),
+			Port:     os.Getenv("HELICONE_PORT"),
+			Payload:  payload,
+		},
 	}
 
 	return providers

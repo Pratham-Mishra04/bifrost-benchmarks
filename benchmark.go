@@ -61,11 +61,12 @@ func main() {
 	provider := flag.String("provider", "", "Specific provider to benchmark (bifrost, portkey, braintrust, llmlite, openrouter)")
 	bigPayload := flag.Bool("big-payload", false, "Use a bigger payload")
 	model := flag.String("model", "gpt-4o-mini", "Model to use")
+	suffix := flag.String("suffix", "v1", "Suffix to add to the url route")
 
 	flag.Parse()
 
 	// Initialize providers
-	providers := initializeProviders(*bigPayload, *model)
+	providers := initializeProviders(*bigPayload, *model, *suffix)
 
 	// Filter providers if specific provider is requested
 	if *provider != "" {
@@ -100,7 +101,7 @@ func getProviderNames(providers []Provider) []string {
 	return names
 }
 
-func initializeProviders(bigPayload bool, model string) []Provider {
+func initializeProviders(bigPayload bool, model string, suffix string) []Provider {
 	// Load environment variables from .env file
 	if err := godotenv.Load(); err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
@@ -155,19 +156,19 @@ func initializeProviders(bigPayload bool, model string) []Provider {
 		})
 	}
 
-	baseUrl := "http://localhost:%s/v1/chat/completions"
+	baseUrl := "http://localhost:%s/%s/chat/completions"
 
 	// Create providers with ports from .env
 	providers := []Provider{
 		{
 			Name:     "Bifrost",
-			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("BIFROST_PORT")),
+			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("BIFROST_PORT"), suffix),
 			Port:     os.Getenv("BIFROST_PORT"),
 			Payload:  payload,
 		},
 		{
 			Name:     "Litellm",
-			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("LITELLM_PORT")),
+			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("LITELLM_PORT"), suffix),
 			Port:     os.Getenv("LITELLM_PORT"),
 			Payload:  payload,
 		},
@@ -197,7 +198,7 @@ func initializeProviders(bigPayload bool, model string) []Provider {
 		// },
 		{
 			Name:     "Helicone",
-			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("HELICONE_PORT")),
+			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("HELICONE_PORT"), suffix),
 			Port:     os.Getenv("HELICONE_PORT"),
 			Payload:  payload,
 		},

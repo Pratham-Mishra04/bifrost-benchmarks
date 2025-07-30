@@ -140,8 +140,7 @@ func initializeProviders(bigPayload bool, model string, suffix string) []Provide
 						"Please provide detailed explanations with examples and technical details for each point. ",
 				},
 			},
-			"provider": "openai",
-			"model":    model,
+			"model": "openai/" + model,
 		})
 	} else {
 		payload, _ = json.Marshal(map[string]interface{}{
@@ -151,8 +150,7 @@ func initializeProviders(bigPayload bool, model string, suffix string) []Provide
 					"content": "This is a benchmark request #{request_index} at #{timestamp}. How are you?",
 				},
 			},
-			"provider": "openai",
-			"model":    model,
+			"model": "openai/" + model,
 		})
 	}
 

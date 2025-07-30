@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/maximhq/bifrost/core/schemas"
@@ -37,13 +38,15 @@ type OpenAIError struct {
 }
 
 var (
-	port    int
-	latency int
+	port       int
+	latency    int
+	bigPayload bool
 )
 
 func init() {
 	flag.IntVar(&port, "port", 8000, "Port for the mock server to listen on")
 	flag.IntVar(&latency, "latency", 0, "Latency in milliseconds to simulate")
+	flag.BoolVar(&bigPayload, "big-payload", false, "Use big payload")
 }
 
 // StrPtr creates a pointer to a string value.
@@ -62,10 +65,17 @@ func mockOpenAIHandler(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(time.Duration(latency) * time.Millisecond)
 	}
 
+	mockContent := "This is a mocked response from the OpenAI mocker server."
+	if bigPayload {
+		// Repeat content to generate approximately 50KB response
+		// Each repetition is ~55 chars, so ~909 repetitions ≈ 50KB
+		mockContent = strings.Repeat(mockContent, 909)
+	}
+
 	// Create a mock response
 	mockChoiceMessage := schemas.BifrostResponseChoiceMessage{
 		Role:    schemas.ModelChatMessageRole("assistant"),
-		Content: StrPtr("This is a mocked response from the OpenAI mocker server."),
+		Content: StrPtr(mockContent),
 	}
 	mockChoice := schemas.BifrostResponseChoice{
 		Index:        0,

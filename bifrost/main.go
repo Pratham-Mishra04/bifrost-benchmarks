@@ -70,8 +70,8 @@ func init() {
 }
 
 type ChatRequest struct {
-	Messages []schemas.Message `json:"messages"`
-	Model    string            `json:"model"`
+	Messages []schemas.BifrostMessage `json:"messages"`
+	Model    string                   `json:"model"`
 }
 
 func main() {
@@ -102,6 +102,11 @@ func main() {
 				ctx.SetStatusCode(fasthttp.StatusBadRequest)
 				ctx.SetBodyString(fmt.Sprintf("invalid request format: %v", err))
 				return
+			}
+
+			if strings.Contains(chatReq.Model, "/") {
+				parts := strings.Split(chatReq.Model, "/")
+				chatReq.Model = parts[1]
 			}
 
 			bifrostReq := &schemas.BifrostRequest{
@@ -158,7 +163,7 @@ func main() {
 	<-sigChan
 	fmt.Println("\nShutting down server...")
 
-	client.Shutdown()
+	client.Cleanup()
 
 	// Shutdown server gracefully
 	if err := server.Shutdown(); err != nil {

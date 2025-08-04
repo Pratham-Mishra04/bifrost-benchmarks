@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -162,8 +163,8 @@ func PrintStats() {
 }
 
 type ChatRequest struct {
-	Messages []schemas.Message `json:"messages"`
-	Model    string            `json:"model"`
+	Messages []schemas.BifrostMessage `json:"messages"`
+	Model    string                   `json:"model"`
 }
 
 func DebugHandler(client *bifrost.Bifrost) func(ctx *fasthttp.RequestCtx) {
@@ -197,6 +198,11 @@ func DebugHandler(client *bifrost.Bifrost) func(ctx *fasthttp.RequestCtx) {
 			ctx.SetStatusCode(fasthttp.StatusBadRequest)
 			ctx.SetBodyString("Messages array is required")
 			return
+		}
+
+		if strings.Contains(chatReq.Model, "/") {
+			parts := strings.Split(chatReq.Model, "/")
+			chatReq.Model = parts[1]
 		}
 
 		// Create Bifrost request

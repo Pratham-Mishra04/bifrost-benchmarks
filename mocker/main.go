@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -67,9 +68,9 @@ func mockOpenAIHandler(w http.ResponseWriter, r *http.Request) {
 
 	mockContent := "This is a mocked response from the OpenAI mocker server."
 	if bigPayload {
-		// Repeat content to generate approximately 50KB response
-		// Each repetition is ~55 chars, so ~909 repetitions ≈ 50KB
-		mockContent = strings.Repeat(mockContent, 909)
+		// Repeat content to generate approximately 10KB response
+		// Each repetition is ~55 chars, so ~182 repetitions ≈ 10KB
+		mockContent = strings.Repeat(mockContent, 182)
 	}
 
 	// Create a mock response
@@ -83,6 +84,9 @@ func mockOpenAIHandler(w http.ResponseWriter, r *http.Request) {
 		FinishReason: StrPtr("stop"),
 	}
 
+	randomInputTokens := rand.Intn(1000)
+	randomOutputTokens := rand.Intn(1000)
+
 	mockResp := OpenAIResponse{
 		ID:      "cmpl-mock12345",
 		Object:  "chat.completion",
@@ -90,9 +94,9 @@ func mockOpenAIHandler(w http.ResponseWriter, r *http.Request) {
 		Model:   "gpt-3.5-turbo-mock",
 		Choices: []schemas.BifrostResponseChoice{mockChoice},
 		Usage: schemas.LLMUsage{
-			PromptTokens:     10,
-			CompletionTokens: 20,
-			TotalTokens:      30,
+			PromptTokens:     randomInputTokens,
+			CompletionTokens: randomOutputTokens,
+			TotalTokens:      randomInputTokens + randomOutputTokens,
 		},
 	}
 

@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -25,7 +26,7 @@ func NewBaseAccount(apiKey string, proxyURL string, concurrency int, bufferSize 
 	}
 }
 
-func (a *BaseAccount) GetKeysForProvider(providerKey schemas.ModelProvider) ([]schemas.Key, error) {
+func (a *BaseAccount) GetKeysForProvider(ctx *context.Context, providerKey schemas.ModelProvider) ([]schemas.Key, error) {
 	if providerKey == schemas.OpenAI {
 		return []schemas.Key{
 			{

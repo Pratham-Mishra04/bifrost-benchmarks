@@ -433,6 +433,7 @@ func createTargeter(provider Provider) vegeta.Targeter {
 		tgt.Body = updatedPayload
 		tgt.Header = http.Header{
 			"Content-Type": []string{"application/json"},
+			"x-bf-vk":      []string{"f452b625-a65e-4dfd-b48d-0ee3ba0e8d46"},
 		}
 
 		if provider.Name == "Portkey" {

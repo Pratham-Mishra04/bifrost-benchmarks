@@ -140,8 +140,7 @@ func initializeProviders(bigPayload bool, model string, suffix string) []Provide
 						"Please provide detailed explanations with examples and technical details for each point. ",
 				},
 			},
-			"provider": "openai",
-			"model":    model,
+			"model":    "openai/" + model,
 		})
 	} else {
 		payload, _ = json.Marshal(map[string]interface{}{
@@ -151,8 +150,7 @@ func initializeProviders(bigPayload bool, model string, suffix string) []Provide
 					"content": "This is a benchmark request #{request_index} at #{timestamp}. How are you?",
 				},
 			},
-			"provider": "openai",
-			"model":    model,
+			"model":    "gpt-4o-mini",
 		})
 	}
 
@@ -172,12 +170,12 @@ func initializeProviders(bigPayload bool, model string, suffix string) []Provide
 			Port:     os.Getenv("LITELLM_PORT"),
 			Payload:  payload,
 		},
-		// {
-		// 	Name:     "Portkey",
-		// 	Endpoint: fmt.Sprintf(baseUrl, os.Getenv("PORTKEY_PORT")),
-		// 	Port:     os.Getenv("PORTKEY_PORT"),
-		// 	Payload:  payload,
-		// },
+		{
+			Name:     "Portkey",
+			Endpoint: fmt.Sprintf(baseUrl, os.Getenv("PORTKEY_PORT"), suffix),
+			Port:     os.Getenv("PORTKEY_PORT"),
+			Payload:  payload,
+		},
 		// {
 		// 	Name:     "Braintrust",
 		// 	Endpoint: fmt.Sprintf(baseUrl, os.Getenv("BRAINTRUST_PORT")),
@@ -443,7 +441,10 @@ func createTargeter(provider Provider) vegeta.Targeter {
 				return fmt.Errorf("OPENAI_API_KEY is not set")
 			}
 
-			tgt.Header.Set("x-portkey-config", fmt.Sprintf(`{"provider":"openai","api_key":"%s"}`, openaiApiKey))
+			// tgt.Header.Set("x-portkey-config", fmt.Sprintf(`{"provider":"openai","api_key":"%s"}`, openaiApiKey))
+			tgt.Header.Set("x-portkey-custom-host", "http://localhost:8000/v1")
+			tgt.Header.Set("x-portkey-provider", "openai")
+			tgt.Header.Set("Authorization", openaiApiKey)
 		}
 
 		return nil
@@ -519,7 +520,7 @@ func saveResults(results []BenchmarkResult, outputFile string) {
 			StatusCodeCounts:   statusCodes,
 			ServerPeakMemoryMB: float64(peakMem) / (1024 * 1024),
 			ServerAvgMemoryMB:  avgMem,
-			// DropReasons:        res.DropReasons, // Include drop reasons in output
+			DropReasons:        res.DropReasons, // Include drop reasons in output
 		}
 	}
 

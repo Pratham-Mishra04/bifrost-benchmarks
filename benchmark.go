@@ -150,7 +150,7 @@ func initializeProviders(bigPayload bool, model string, suffix string) []Provide
 					"content": "This is a benchmark request #{request_index} at #{timestamp}. How are you?",
 				},
 			},
-			"model": "openai/" + model,
+			"model": "gpt-4o-mini",
 		})
 	}
 
